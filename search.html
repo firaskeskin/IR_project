@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8" />
+  <title>واجهة بحث متقدمة</title>
+  <style>
+    body {
+      font-family: 'Tahoma', sans-serif;
+      direction: rtl;
+      background-color: #f9f9f9;
+      padding: 30px;
+    }
+    .container {
+      max-width: 650px;
+      margin: auto;
+      background: white;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #ccc;
+    }
+    h2 { color: #333; margin-bottom: 20px; }
+    label { display: block; margin-top: 15px; }
+    select, input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    button:hover {
+      background-color: #3e8e41;
+    }
+    .results {
+      margin-top: 25px;
+    }
+    .result-item {
+      background-color: #eef;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 6px;
+    }
+    .toggle-container {
+      display: flex;
+      align-items: center;
+      background-color: #eaf2ff;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #cdd8f0;
+      transition: background-color 0.3s ease;
+      cursor: pointer;
+    }
+    .toggle-container:hover {
+      background-color: #d4e5ff;
+    }
+    .toggle-label {
+      margin-right: 10px;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    .toggle-container input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      accent-color: #4CAF50;
+      cursor: pointer;
+    }
+    .refined-box {
+      background-color: #fff7dd;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #ffe58f;
+      margin-top: 15px;
+      font-family: 'Courier New', monospace;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Advanced Information Retrive System</h2>
+    
+    <label for="queryInput">📝 My Query</label>
+    <input type="text" id="queryInput" placeholder="  Insert Your Query..." />
+
+    <label for="datasetSelect">📚 Select Dataset</label>
+    <select id="datasetSelect">
+      <option value="clinical">Clinical</option>
+      <option value="quora">Quora</option>
+    </select>
+
+    <label for="representationSelect">🧠  Represntation Type</label>
+    <select id="representationSelect">
+      <option value="tfidf">TF-IDF</option>
+      <option value="word2vec">Embedding</option>
+      <option value="hybrid">Hybrid</option>
+    </select>
+
+    <div style="margin-top: 15px;">
+      <label class="toggle-container">
+        <input type="checkbox" id="refineToggle" />
+        <span class="toggle-label">💡 Suggest Refined Query</span>
+      </label>
+    </div>
+
+    <div id="pineconeToggleWrapper" style="display:none; margin-top: 15px;">
+      <label class="toggle-container">
+        <input type="checkbox" id="pineconeToggle" />
+        <span class="toggle-label">Vector Store</span>
+      </label>
+    </div>
+
+    <button onclick="performSearch()">🔍 Search</button>
+
+    <div id="refinedQueryBox"></div>
+    <div class="results" id="resultsContainer"></div>
+  </div>
+
+  <script>
+    const representationSelect = document.getElementById("representationSelect");
+    const pineconeWrapper = document.getElementById("pineconeToggleWrapper");
+
+    representationSelect.addEventListener("change", function () {
+      if (this.value === "word2vec") {
+        pineconeWrapper.style.display = "block";
+      } else {
+        pineconeWrapper.style.display = "none";
+        document.getElementById("pineconeToggle").checked = false;
+      }
+    });
+
+    async function performSearch() {
+      const query = document.getElementById("queryInput").value;
+      const dataset = document.getElementById("datasetSelect").value;
+      const representation = document.getElementById("representationSelect").value;
+      const usePinecone = document.getElementById("pineconeToggle").checked;
+      const refineToggle = document.getElementById("refineToggle").checked;
+
+      const resultsContainer = document.getElementById("resultsContainer");
+      const refinedQueryBox = document.getElementById("refinedQueryBox");
+
+      resultsContainer.innerHTML = "<p>🔄 Search Processing...</p>";
+      refinedQueryBox.innerHTML = "";
+
+      let endpoint = "http://127.0.0.1:8001/tfIdf-matching";
+
+      if (representation === "word2vec") {
+        endpoint = "http://127.0.0.1:8001/word2vec-matching";
+      } else if (representation === "hybrid") {
+        endpoint = "http://127.0.0.1:8001/hybrid-matching";
+      }
+
+      const payload = {
+        query: query,
+        dataset: dataset,
+        use_pinecone: usePinecone,
+        refine: refineToggle
+      };
+
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+      
+        const data = await response.json(); 
+
+        // عرض الاستعلام المحسن إن وُجد
+        if (data.refined_query && data.refined_query !== query) {
+          refinedQueryBox.innerHTML = `
+            <div class="refined-box">
+              <strong>✨ Suggested Refined Query:</strong><br>
+              <em>${data.refined_query}</em>
+            </div>
+          `;
+        }
+
+        // عرض النتائج
+        if (data.top_docs && data.top_docs.length > 0) {
+          resultsContainer.innerHTML = "";
+          data.top_docs.forEach((doc, index) => {
+            const div = document.createElement("div");
+            div.className = "result-item";
+            div.innerHTML = `<strong>📁 المستند #${data.top_ids[index]}</strong><br>${doc}`;
+            resultsContainer.appendChild(div);
+          });
+        } else {
+          resultsContainer.innerHTML = "<p>❗ There Is No Matching Result </p>";
+        }
+
+      } catch (error) {
+        resultsContainer.innerHTML = `<p>❌ An Error Happened During Searching: ${error.message}</p>`;
+      }
+    }
+  </script>
+</body>
+</html>
